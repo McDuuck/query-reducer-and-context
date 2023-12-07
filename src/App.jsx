@@ -1,26 +1,64 @@
+import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect, useReducer } from 'react'
 import AnecdoteForm from './components/AnecdoteForm'
 import Notification from './components/Notification'
+import {NotificationContext, NotificationProvider} from './NotificationContext'
+import { NotificationReducer } from './components/Notification'
+import { getAll, createNew, update } from './requests/requests'
+
+const initialState = {
+  showNotification: false,
+  message: ''
+};
 
 const App = () => {
+  const [anecdoteVotes, setAnecdoteVotes] = useState(false)
+  const [refetchToggle, setRefetchToggle] = useState(false)
+  const [state, dispatch] = useReducer(NotificationReducer, initialState)
+
 
   const handleVote = (anecdote) => {
-    console.log('vote')
+    anecdote.votes++
+    update(anecdote.id, anecdote)
+    setAnecdoteVotes(!anecdoteVotes)
+    console.log('vote ', anecdote)
+    dispatch({ type: 'SHOW_NOTIFICATION', payload: `You voted ${anecdote.content}` })
   }
 
-  const anecdotes = [
-    {
-      "content": "If it hurts, do it more often",
-      "id": "47145",
-      "votes": 0
-    },
-  ]
+  const result = useQuery({
+    queryKey: ['anecdotes'],
+    queryFn: getAll,
+    retry: 1
+  })
 
+  const handleCreate = async (content) => {
+    await createNew(content)
+    setRefetchToggle(!refetchToggle)
+    dispatch({ type: 'SHOW_NOTIFICATION', payload: `You created ${content}` })
+  }
+
+  useEffect(() => {
+    result.refetch()
+  }
+  , [refetchToggle, anecdoteVotes])
+
+
+  if ( result.isLoading ) {
+    return <div>Loading data...</div>
+  }
+
+  if ( result.isError ) {
+    return <div>anecdote service not avaible due to problems in server</div>
+  }
+
+  const anecdotes = result.data
   return (
+    <NotificationContext.Provider value={{ state, dispatch }}>
     <div>
       <h3>Anecdote app</h3>
     
       <Notification />
-      <AnecdoteForm />
+      <AnecdoteForm onCreate={handleCreate}/>
     
       {anecdotes.map(anecdote =>
         <div key={anecdote.id}>
@@ -34,6 +72,7 @@ const App = () => {
         </div>
       )}
     </div>
+    </NotificationContext.Provider>
   )
 }
 
